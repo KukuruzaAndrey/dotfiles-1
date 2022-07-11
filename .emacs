@@ -1,31 +1,147 @@
+;; turn off startscreen
+(setq inhibit-startup-screen t)
+
+;; turn off menubar
+(menu-bar-mode 0)
+(tool-bar-mode 0)
+;(column-number-mode 1)
+
+;; map backspace [delete-backward-char] to C-h
+(define-key key-translation-map [?\C-?] [?\C-h])
+
+;; map M-backspace [backward-kill-word] to M-h
+(define-key key-translation-map [?\M-\d] [?\M-h])
+
+;; map C-h to backspace
+(define-key key-translation-map [?\C-h] [?\C-?])
+
+;; map M-h [mark-paragraph] to M-backspace
+(define-key key-translation-map [?\M-h] [?\M-\d])
+
+;; turn off bell
+(setq visible-bell nil)
+(setq ring-bell-function 'ignore)
+
+
+
+;; show line numbres
+(global-display-line-numbers-mode)
+
+;; m-x compile -> 
+(setq compilation-auto-jump-to-first-error 1) 
+
+;; autosave buffer to original file http://xahlee.info/emacs/emacs/emacs_auto_save.html
+(defun xah-save-all-unsaved ()
+  "Save all unsaved files. no ask. Version 2019-11-05"
+  (interactive)
+  (save-some-buffers t ))
+
+(if (version< emacs-version "27")
+    (add-hook 'focus-out-hook 'xah-save-all-unsaved)
+  (setq after-focus-change-function 'xah-save-all-unsaved))
+
+;; paakge manager? 
 (package-initialize)
 
-(load "~/.emacs.rc/rc.el")
+(add-to-list 'package-archives
+             '("melpa" . "https://melpa.org/packages/") t)
 
-(load "~/.emacs.rc/misc-rc.el")
-(load "~/.emacs.rc/org-mode-rc.el")
-(load "~/.emacs.rc/autocommit-rc.el")
+(defvar rc/package-contents-refreshed nil)
 
-;;; Appearance
-(defun rc/get-default-font ()
-  (cond
-   ((eq system-type 'windows-nt) "Consolas-13")
-   ((eq system-type 'gnu/linux) "Iosevka-20")))
+(defun rc/package-refresh-contents-once ()
+  (when (not rc/package-contents-refreshed)
+    (setq rc/package-contents-refreshed t)
+    (package-refresh-contents)))
 
-(add-to-list 'default-frame-alist `(font . ,(rc/get-default-font)))
+(defun rc/require-one-package (package)
+  (when (not (package-installed-p package))
+    (rc/package-refresh-contents-once)
+    (package-install package)))
 
-(tool-bar-mode 0)
-(menu-bar-mode 0)
-(scroll-bar-mode 0)
-(column-number-mode 1)
-(show-paren-mode 1)
+(defun rc/require (&rest packages)
+  (dolist (package packages)
+    (rc/require-one-package package)))
 
-(rc/require-theme 'gruber-darker)
-;; (rc/require-theme 'zenburn)
-;; (load-theme 'adwaita t)
 
-(eval-after-load 'zenburn
-  (set-face-attribute 'line-number nil :inherit 'default))
+
+;;; Move Text
+(rc/require 'move-text)
+(global-set-key (kbd "M-p") 'move-text-up)
+(global-set-key (kbd "M-n") 'move-text-down)
+
+;; Duplicate
+(defun wrx/duplicate-line-or-region (beg end)
+  "Implements functionality of JetBrains' `Command-d' shortcut for `duplicate-line'.
+   BEG & END correspond point & mark, smaller first
+   `use-region-p' explained: 
+   http://emacs.stackexchange.com/questions/12334/elisp-for-applying-command-to-only-the-selected-region#answer-12335"
+  (interactive "r")
+  (if (use-region-p)
+      (wrx/duplicate-region-in-buffer beg end)
+    (wrx/duplicate-line-in-buffer)))
+
+(defun wrx/duplicate-line-in-buffer ()
+  "Duplicate current line, maintaining column position.
+   |--------------------------+--------------------------|
+   |          before          |          after           |
+   |--------------------------+--------------------------|
+   | lorem ipsum<POINT> dolor | lorem ipsum dolor        |
+   |                          | lorem ipsum<POINT> dolor |
+   |--------------------------+--------------------------|
+   TODO: Save history for `Cmd-Z'
+   Context: 
+   http://stackoverflow.com/questions/88399/how-do-i-duplicate-a-whole-line-in-emacs#answer-551053"
+  (setq columns-over (current-column))
+  (save-excursion
+    (kill-whole-line)
+    (yank)
+    (yank))
+  (let (v)
+    (dotimes (n columns-over v)
+      (right-char)
+      (setq v (cons n v))))
+  (next-line))
+
+(global-set-key (kbd "C-c d") 'wrx/duplicate-line-or-region)
+
+
+;; save frames and buffers at exit
+(setq desktop-path '("~/.emacs.d"))
+(desktop-save-mode 1)
+
+;; patch for restore frames from here https://emacs.stackexchange.com/questions/19190/desktop-save-mode-fails-to-save-window-layout
+(setq desktop-restore-forces-onscreen nil)
+(add-hook 'desktop-after-read-hook
+ (lambda ()
+   (frameset-restore
+    desktop-saved-frameset
+    :reuse-frames (eq desktop-restore-reuses-frames t)
+    :cleanup-frames (not (eq desktop-restore-reuses-frames 'keep))
+    :force-display desktop-restore-in-current-display
+    :force-onscreen desktop-restore-forces-onscreen)))
+
+
+(custom-set-variables
+ ;; custom-set-variables was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(custom-enabled-themes (quote (deeper-blue)))
+ '(custom-safe-themes
+   (quote
+    ("3d2e532b010eeb2f5e09c79f0b3a277bfc268ca91a59cdda7ffd056b868a03bc" default)))
+ '(package-selected-packages
+   (quote
+    (haskell-mode multiple-cursors gruber-darker-theme smex move-text))))
+(custom-set-faces
+ ;; custom-set-faces was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ )
+
+;; path to backups files
+(setq backup-directory-alist '(("." . "~/.emacs_saves")))
 
 ;;; ido
 (rc/require 'smex 'ido-completing-read+)
@@ -39,87 +155,7 @@
 (global-set-key (kbd "M-x") 'smex)
 (global-set-key (kbd "C-c C-c M-x") 'execute-extended-command)
 
-;;; c-mode
-(setq-default c-basic-offset 4
-              c-default-style '((java-mode . "java")
-                                (awk-mode . "awk")
-                                (other . "bsd")))
 
-(add-hook 'c-mode-hook (lambda ()
-                         (interactive)
-                         (c-toggle-comment-style -1)))
-
-;;; Paredit
-(rc/require 'paredit)
-
-(defun rc/turn-on-paredit ()
-  (interactive)
-  (paredit-mode 1))
-
-(add-hook 'emacs-lisp-mode-hook  'rc/turn-on-paredit)
-(add-hook 'clojure-mode-hook     'rc/turn-on-paredit)
-(add-hook 'lisp-mode-hook        'rc/turn-on-paredit)
-(add-hook 'common-lisp-mode-hook 'rc/turn-on-paredit)
-(add-hook 'scheme-mode-hook      'rc/turn-on-paredit)
-(add-hook 'racket-mode-hook      'rc/turn-on-paredit)
-
-;;; Emacs lisp
-(add-hook 'emacs-lisp-mode-hook
-          '(lambda ()
-             (local-set-key (kbd "C-c C-j")
-                            (quote eval-print-last-sexp))))
-(add-to-list 'auto-mode-alist '("Cask" . emacs-lisp-mode))
-
-;;; Haskell mode
-(rc/require 'haskell-mode)
-
-(setq haskell-process-type 'cabal-new-repl)
-(setq haskell-process-log t)
-
-(add-hook 'haskell-mode-hook 'haskell-indent-mode)
-(add-hook 'haskell-mode-hook 'interactive-haskell-mode)
-(add-hook 'haskell-mode-hook 'haskell-doc-mode)
-(add-hook 'haskell-mode-hook 'hindent-mode)
-
-;;; Whitespace mode
-(defun rc/set-up-whitespace-handling ()
-  (interactive)
-  (whitespace-mode 1)
-  (add-to-list 'write-file-functions 'delete-trailing-whitespace))
-
-(add-hook 'tuareg-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'c++-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'c-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'emacs-lisp-mode 'rc/set-up-whitespace-handling)
-(add-hook 'java-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'lua-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'rust-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'scala-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'markdown-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'haskell-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'python-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'erlang-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'asm-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'nasm-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'go-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'nim-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'yaml-mode-hook 'rc/set-up-whitespace-handling)
-(add-hook 'porth-mode-hook 'rc/set-up-whitespace-handling)
-
-;;; display-line-numbers-mode
-(when (version<= "26.0.50" emacs-version)
-  (global-display-line-numbers-mode))
-
-;;; magit
-;; magit requres this lib, but it is not installed automatically on
-;; Windows.
-(rc/require 'cl-lib)
-(rc/require 'magit)
-
-(setq magit-auto-revert-mode nil)
-
-(global-set-key (kbd "C-c m s") 'magit-status)
-(global-set-key (kbd "C-c m l") 'magit-log)
 
 ;;; multiple cursors
 (rc/require 'multiple-cursors)
@@ -131,214 +167,4 @@
 (global-set-key (kbd "C-\"")        'mc/skip-to-next-like-this)
 (global-set-key (kbd "C-:")         'mc/skip-to-previous-like-this)
 
-;;; dired
-(require 'dired-x)
-(setq dired-omit-files
-      (concat dired-omit-files "\\|^\\..+$"))
-(setq-default dired-dwim-target t)
-(setq dired-listing-switches "-alh")
-
-;;; helm
-(rc/require 'helm 'helm-cmd-t 'helm-git-grep 'helm-ls-git)
-
-(setq helm-ff-transformer-show-only-basename nil)
-
-(global-set-key (kbd "C-c h t") 'helm-cmd-t)
-(global-set-key (kbd "C-c h g g") 'helm-git-grep)
-(global-set-key (kbd "C-c h g l") 'helm-ls-git-ls)
-(global-set-key (kbd "C-c h f") 'helm-find)
-(global-set-key (kbd "C-c h a") 'helm-org-agenda-files-headings)
-(global-set-key (kbd "C-c h r") 'helm-recentf)
-
-;;; yasnippet
-(rc/require 'yasnippet)
-
-(require 'yasnippet)
-
-(setq yas/triggers-in-field nil)
-(setq yas-snippet-dirs '("~/.emacs.snippets/"))
-
-(yas-global-mode 1)
-
-;;; word-wrap
-(defun rc/enable-word-wrap ()
-  (interactive)
-  (toggle-word-wrap 1))
-
-(add-hook 'markdown-mode-hook 'rc/enable-word-wrap)
-
-;;; nxml
-(add-to-list 'auto-mode-alist '("\\.html\\'" . nxml-mode))
-(add-to-list 'auto-mode-alist '("\\.xsd\\'" . nxml-mode))
-(add-to-list 'auto-mode-alist '("\\.ant\\'" . nxml-mode))
-
-;;; tramp
-;;; http://stackoverflow.com/questions/13794433/how-to-disable-autosave-for-tramp-buffers-in-emacs
-(setq tramp-auto-save-directory "/tmp")
-
-;;; powershell
-(rc/require 'powershell)
-(add-to-list 'auto-mode-alist '("\\.ps1\\'" . powershell-mode))
-(add-to-list 'auto-mode-alist '("\\.psm1\\'" . powershell-mode))
-
-;;; eldoc mode
-(defun rc/turn-on-eldoc-mode ()
-  (interactive)
-  (eldoc-mode 1))
-
-(add-hook 'emacs-lisp-mode-hook 'rc/turn-on-eldoc-mode)
-
-;;; Company
-(rc/require 'company)
-(require 'company)
-
-(global-company-mode)
-
-(add-hook 'tuareg-mode-hook
-          (lambda ()
-            (interactive)
-            (company-mode 0)))
-
-;;; Tide
-(rc/require 'tide)
-
-(defun rc/turn-on-tide ()
-  (interactive)
-  (tide-setup))
-
-(add-hook 'typescript-mode-hook 'rc/turn-on-tide)
-
-;;; Proof general
-(rc/require 'proof-general)
-(add-hook 'coq-mode-hook
-          '(lambda ()
-             (local-set-key (kbd "C-c C-q C-n")
-                            (quote proof-assert-until-point-interactive))))
-
-;;; Nasm Mode
-(rc/require 'nasm-mode)
-(add-to-list 'auto-mode-alist '("\\.asm\\'" . nasm-mode))
-
-;;; LaTeX mode
-(add-hook 'tex-mode-hook
-          (lambda ()
-            (interactive)
-            (add-to-list 'tex-verbatim-environments "code")))
-
-;;; Move Text
-(rc/require 'move-text)
-(global-set-key (kbd "M-p") 'move-text-up)
-(global-set-key (kbd "M-n") 'move-text-down)
-
-;;; Ebisp
-(add-to-list 'auto-mode-alist '("\\.ebi\\'" . lisp-mode))
-
-;;; Packages that don't require configuration
-(rc/require
- 'scala-mode
- 'd-mode
- 'yaml-mode
- 'glsl-mode
- 'tuareg
- 'lua-mode
- 'less-css-mode
- 'graphviz-dot-mode
- 'clojure-mode
- 'cmake-mode
- 'rust-mode
- 'csharp-mode
- 'nim-mode
- 'jinja2-mode
- 'markdown-mode
- 'purescript-mode
- 'nix-mode
- 'dockerfile-mode
- 'love-minor-mode
- 'toml-mode
- 'nginx-mode
- 'kotlin-mode
- 'go-mode
- 'php-mode
- 'racket-mode
- 'qml-mode
- 'ag
- 'hindent
- 'elpy
- 'typescript-mode
- 'rfc-mode
- 'sml-mode
- )
-
-(load "~/.emacs.shadow/shadow-rc.el" t)
-
-(add-to-list 'load-path "~/.emacs.local/")
-(require 'basm-mode)
-(require 'porth-mode)
-(require 'noq-mode)
-(require 'jai-mode)
-
-(require 'simpc-mode)
-(add-to-list 'auto-mode-alist '("\\.[hc]\\(pp\\)?\\'" . simpc-mode))
-
-(defun astyle-buffer (&optional justify)
-  (interactive)
-  (let ((saved-line-number (line-number-at-pos)))
-    (shell-command-on-region
-     (point-min)
-     (point-max)
-     "astyle --style=kr"
-     nil
-     t)
-    (goto-line saved-line-number)))
-
-(add-hook 'simpc-mode-hook
-          (lambda ()
-            (interactive)
-            (setq-local fill-paragraph-function 'astyle-buffer)))
-
-(require 'compile)
-
-;; pascalik.pas(24,44) Error: Can't evaluate constant expression
-
-compilation-error-regexp-alist-alist
-
-(add-to-list 'compilation-error-regexp-alist
-             '("\\([a-zA-Z0-9\\.]+\\)(\\([0-9]+\\)\\(,\\([0-9]+\\)\\)?) \\(Warning:\\)?"
-               1 2 (4) (5)))
-
-(custom-set-variables
- ;; custom-set-variables was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- '(display-line-numbers-type (quote relative))
- '(org-agenda-dim-blocked-tasks nil)
- '(org-agenda-exporter-settings (quote ((org-agenda-tag-filter-preset (list "+personal")))))
- '(org-cliplink-transport-implementation (quote url-el))
- '(org-enforce-todo-dependencies nil)
- '(org-modules
-   (quote
-    (org-bbdb org-bibtex org-docview org-gnus org-habit org-info org-irc org-mhe org-rmail org-w3m)))
- '(org-refile-use-outline-path (quote file))
- '(package-selected-packages
-   (quote
-    (rainbow-mode proof-general elpy hindent ag qml-mode racket-mode php-mode go-mode kotlin-mode nginx-mode toml-mode love-minor-mode dockerfile-mode nix-mode purescript-mode markdown-mode jinja2-mode nim-mode csharp-mode rust-mode cmake-mode clojure-mode graphviz-dot-mode lua-mode tuareg glsl-mode yaml-mode d-mode scala-mode move-text nasm-mode editorconfig tide company powershell js2-mode yasnippet helm-ls-git helm-git-grep helm-cmd-t helm multiple-cursors magit haskell-mode paredit ido-completing-read+ smex gruber-darker-theme org-cliplink dash-functional dash)))
- '(safe-local-variable-values
-   (quote
-    ((eval progn
-           (auto-revert-mode 1)
-           (rc/autopull-changes)
-           (add-hook
-            (quote after-save-hook)
-            (quote rc/autocommit-changes)
-            nil
-            (quote make-it-local))))))
- '(whitespace-style
-   (quote
-    (face tabs spaces trailing space-before-tab newline indentation empty space-after-tab space-mark tab-mark))))
-(custom-set-faces
- ;; custom-set-faces was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- )
+(rc/require 'haskell-mode)
